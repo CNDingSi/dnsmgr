@@ -490,6 +490,8 @@ class Domain extends BaseController
         $type = input('post.type', null, 'trim');
         $line = input('post.line', null, 'trim');
         $status = input('post.status', null, 'trim');
+        $sort = input('post.sortName', null, 'trim');
+        $sortOrder = strtolower(input('post.sortOrder', 'asc')) === 'desc' ? 'desc' : 'asc';
         $offset = input('post.offset/d', 0);
         $limit = input('post.limit/d', 10);
         if ($limit == 0) {
@@ -505,7 +507,14 @@ class Domain extends BaseController
         if (!checkPermission(0, $drow['name'])) return json(['total' => 0, 'rows' => []]);
 
         $dns = DnsHelper::getModel($drow['aid'], $drow['name'], $drow['thirdid']);
-        $domainRecords = $dns->getDomainRecords($page, $limit, $keyword, $subdomain, $value, $type, $line, $status);
+        $dnstype = Db::name('account')->where('id', $drow['aid'])->value('type');
+        if (DnsHelper::$dns_config[$dnstype]['sort']) {
+            $allowedSort = ['Name', 'Type', 'LineName', 'Value', 'UpdateTime'];
+            $sort = in_array($sort, $allowedSort, true) ? $sort : null;
+            $domainRecords = $dns->getDomainRecords($page, $limit, $keyword, $subdomain, $value, $type, $line, $status, $sort, $sortOrder);
+        } else {
+            $domainRecords = $dns->getDomainRecords($page, $limit, $keyword, $subdomain, $value, $type, $line, $status);
+        }
         if (!$domainRecords) return json(['total' => 0, 'rows' => []]);
 
         if (empty($keyword) && empty($subdomain) && empty($type) && isNullOrEmpty($line) && empty($status) && empty($value) && $domainRecords['total'] != $drow['recordcount']) {
@@ -518,7 +527,6 @@ class Domain extends BaseController
             $row['LineName'] = isset($recordLine[$row['Line']]) ? $recordLine[$row['Line']]['name'] : $row['Line'];
         }
 
-        $dnstype = Db::name('account')->where('id', $drow['aid'])->value('type');
         if (DnsHelper::$dns_config[$dnstype]['page']) {
             return json($domainRecords['list']);
         }
@@ -932,6 +940,34 @@ class Domain extends BaseController
         return view('batchadd2');
     }
 
+    public function record_import()
+    {
+        $id = input('param.id/d');
+        $drow = Db::name('domain')->where('id', $id)->find();
+        if (!$drow) {
+            return $this->alert('error', '域名不存在');
+        }
+        $dnstype = Db::name('account')->where('id', $drow['aid'])->value('type');
+        if (!checkPermission(0, $drow['name'])) return $this->alert('error', '无权限');
+
+        list($recordLine, $minTTL) = $this->get_line_and_ttl($drow);
+        $recordLineArr = [];
+        foreach ($recordLine as $key => $item) {
+            $recordLineArr[] = ['id' => strval($key), 'name' => $item['name'], 'parent' => $item['parent']];
+        }
+
+        $dnsconfig = DnsHelper::$dns_config[$dnstype];
+        $dnsconfig['type'] = $dnstype;
+
+        View::assign('domainId', $id);
+        View::assign('domainName', $drow['name']);
+        View::assign('recordLine', $recordLineArr);
+        View::assign('minTTL', $minTTL ? $minTTL : 1);
+        View::assign('dnsconfig', $dnsconfig);
+        View::assign('defaultLine', strval(DnsHelper::$line_name[$dnstype]['DEF'] ?? ''));
+        return view('record_import');
+    }
+
     public function record_batch_edit2()
     {
         if (request()->isAjax()) {
@@ -1008,6 +1044,36 @@ class Domain extends BaseController
         }
 
         return view('batchedit');
+    }
+
+    public function record_search()
+    {
+        if (request()->user['type'] == 'domain') {
+            return redirect('/record/' . request()->user['id']);
+        }
+        if (!checkPermission(1)) return $this->alert('error', '无权限');
+
+        $list = Db::name('domain')->alias('A')->join('account B', 'A.aid = B.id')
+            ->field('A.id, A.name, B.type')
+            ->order('A.name', 'asc')
+            ->select();
+
+        $domainList = [];
+        foreach ($list as $row) {
+            if (request()->user['level'] == 1 && !in_array($row['name'], request()->user['permission'])) {
+                continue;
+            }
+            $domainList[] = [
+                'id' => $row['id'],
+                'name' => $row['name'],
+                'type' => $row['type'],
+                'dnsType' => isset(DnsHelper::$dns_config[$row['type']]) ? DnsHelper::$dns_config[$row['type']]['name'] : $row['type'],
+                'icon' => isset(DnsHelper::$dns_config[$row['type']]) ? DnsHelper::$dns_config[$row['type']]['icon'] : ''
+            ];
+        }
+
+        View::assign('domainList', $domainList);
+        return view('record_search');
     }
 
     public function record_log()
@@ -1380,11 +1446,22 @@ class Domain extends BaseController
         $dns_records = array_map('strtolower', $dns_records);
         $expected_value = strtolower(rtrim(trim($value), '.'));
 
-        if (in_array($expected_value, $dns_records)) {
+        if (self::recordValueMatches($expected_value, $dns_records)) {
             return json(['code' => 0, 'data' => ['status' => 'active', 'actual' => $dns_records]]);
         } else {
             return json(['code' => 0, 'data' => ['status' => 'mismatch', 'expected' => $expected_value, 'actual' => $dns_records]]);
         }
+    }
+
+    private static function recordValueMatches($expected, $result)
+    {
+        if (in_array($expected, $result)) return true;
+        $expectedBin = @inet_pton($expected);
+        if ($expectedBin !== false) {
+            $normalized = array_map(fn($v) => @inet_pton($v) ?: $v, $result);
+            return in_array($expectedBin, $normalized);
+        }
+        return false;
     }
 
     public function category()
