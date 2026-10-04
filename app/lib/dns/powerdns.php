@@ -41,7 +41,7 @@ class powerdns implements DnsInterface
     public function getDomainList($KeyWord = null, $PageNumber = 1, $PageSize = 20)
     {
         $data = $this->send_reuqest('GET', '/servers/' . $this->server_id . '/zones');
-        if ($data) {
+        if (is_array($data) && array_is_list($data)) {
             $list = [];
             foreach ($data as $row) {
                 $list[] = [
@@ -52,6 +52,7 @@ class powerdns implements DnsInterface
             }
             return ['total' => count($list), 'list' => $list];
         }
+        if ($data !== false) $this->setError('返回的域名列表格式不正确');
         return false;
     }
 
@@ -404,6 +405,12 @@ class powerdns implements DnsInterface
         }
 
         $arr = json_decode($response['body'], true);
+        if ($method === 'GET' && $path === '/servers/' . $this->server_id . '/zones'
+            && ($response['code'] < 200 || $response['code'] >= 300 || !is_array($arr)
+                || !array_is_list($arr) || !str_starts_with(ltrim($response['body']), '['))) {
+            $this->setError('获取域名列表失败：HTTP ' . $response['code'] . '，返回数据格式不正确或请求失败');
+            return false;
+        }
         if ($response['code'] < 400) {
             return is_array($arr) ? $arr : true;
         } elseif (isset($arr['error'])) {

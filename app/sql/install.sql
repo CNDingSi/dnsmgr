@@ -40,9 +40,14 @@ CREATE TABLE `dnsmgr_domain` (
   `checktime` datetime DEFAULT NULL,
   `noticetime` datetime DEFAULT NULL,
   `checkstatus` tinyint(1) NOT NULL DEFAULT '0',
+  `exist_status` varchar(20) NOT NULL DEFAULT 'unchecked',
+  `exist_checked_at` datetime DEFAULT NULL,
+  `exist_message` varchar(500) DEFAULT NULL,
+  `exist_remote_id` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `name` (`name`),
-  KEY `cid` (`cid`)
+  KEY `cid` (`cid`),
+  KEY `exist_status` (`exist_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 DROP TABLE IF EXISTS `dnsmgr_user`;

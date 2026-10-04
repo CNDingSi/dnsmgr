@@ -74,8 +74,11 @@ class GoEdge implements DnsInterface
             ));
 
             $list = [];
+            if (!isset($countData['count'], $listData['nsDomains']) || !is_array($listData['nsDomains'])) {
+                throw new Exception('返回的域名列表或总数不完整');
+            }
             foreach (($listData['nsDomains'] ?? []) as $row) {
-                if (!is_array($row)) continue;
+                if (!is_array($row)) throw new Exception('返回的域名信息不完整');
                 $list[] = [
                     'DomainId' => $row['id'] ?? null,
                     'Domain' => $row['name'] ?? '',

@@ -8,6 +8,8 @@ use think\facade\View;
 use think\facade\Cache;
 use app\lib\DnsHelper;
 use app\service\ExpireNoticeService;
+use app\service\DomainExistenceService;
+use app\service\DomainLocalDeleteService;
 use app\utils\DnsQueryUtils;
 use Exception;
 
@@ -79,6 +81,7 @@ class Domain extends BaseController
     {
         if (!checkPermission(2)) return $this->alert('error', '无权限');
         $action = input('param.action');
+        if ($action === 'edit') DomainExistenceService::ensureSchema();
         if ($action == 'add') {
             $type = input('post.type');
             $name = input('post.name', null, 'trim');
@@ -131,6 +134,10 @@ class Domain extends BaseController
             $dns = DnsHelper::getModel($id);
             if ($dns) {
                 if ($dns->check()) {
+                    if ($row['type'] !== $type || $row['config'] !== $config) {
+                        Db::name('domain')->where('aid', $id)->update(['exist_status' => 'unchecked',
+                            'exist_checked_at' => null, 'exist_message' => null, 'exist_remote_id' => null]);
+                    }
                     Db::commit();
                     return json(['code' => 0, 'msg' => '修改域名账户成功！']);
                 } else {
@@ -213,33 +220,13 @@ class Domain extends BaseController
         $id = input('post.id');
         $aid = input('post.aid', null, 'trim');
 
-        $select = Db::name('domain')->alias('A')->join('account B', 'A.aid = B.id');
-        if (!empty($id)) {
-            $select->where('A.id', $id);
-        } elseif (!empty($kw)) {
-            $select->whereLike('A.name|A.remark', '%' . $kw . '%');
-        }
-        if (!empty($aid)) {
-            $select->where('A.aid', $aid);
-        }
-        if (!empty($type)) {
-            $select->whereLike('B.type', $type);
-        }
-        if (!isNullOrEmpty($cid)) {
-            $select->where('A.cid', $cid);
-        }
+        $select = DomainExistenceService::query(['id' => $id, 'kw' => $kw, 'aid' => $aid, 'type' => $type,
+            'cid' => $cid, 'status' => $status, 'exist_status' => input('post.exist_status', '', 'trim')]);
         if (request()->user['level'] == 1) {
             $select->where('is_hide', 0)->where('A.name', 'in', request()->user['permission']);
         }
-        if (!isNullOrEmpty($status)) {
-            if ($status == '2') {
-                $select->where('A.expiretime', '<=', date('Y-m-d H:i:s'));
-            } elseif ($status == '1') {
-                $select->where('A.expiretime', '<=', date('Y-m-d H:i:s', time() + 86400 * 30))->where('A.expiretime', '>', date('Y-m-d H:i:s'));
-            }
-        }
         $total = $select->count();
-        $allowedSort = ['id' => 'A.id', 'name' => 'A.name', 'recordcount' => 'A.recordcount', 'addtime' => 'A.addtime', 'regtime' => 'A.regtime', 'expiretime' => 'A.expiretime', 'is_notice' => 'A.is_notice', 'is_hide' => 'A.is_hide', 'is_sso' => 'A.is_sso', 'typename' => 'B.type', 'category_name' => 'A.cid', 'remark' => 'A.remark'];
+        $allowedSort = ['id' => 'A.id', 'name' => 'A.name', 'recordcount' => 'A.recordcount', 'addtime' => 'A.addtime', 'regtime' => 'A.regtime', 'expiretime' => 'A.expiretime', 'is_notice' => 'A.is_notice', 'is_hide' => 'A.is_hide', 'is_sso' => 'A.is_sso', 'typename' => 'B.type', 'category_name' => 'A.cid', 'remark' => 'A.remark', 'exist_status' => 'A.exist_status', 'exist_checked_at' => 'A.exist_checked_at'];
         if ($sort && isset($allowedSort[$sort])) {
             $select->order($allowedSort[$sort], $orderDir);
         } else {
@@ -325,12 +312,7 @@ class Domain extends BaseController
         } elseif ($act == 'del') {
             if (!checkPermission(2)) return $this->alert('error', '无权限');
             $id = input('post.id/d');
-            Db::name('domain')->where('id', $id)->delete();
-            Db::name('domain_alias')->where('did', $id)->delete();
-            Db::name('dmtask')->where('did', $id)->delete();
-            Db::name('optimizeip')->where('did', $id)->delete();
-            Db::name('sctask')->where('did', $id)->delete();
-            return json(['code' => 0]);
+            return $this->delete_local_domains([$id]);
         } elseif ($act == 'batchadd') {
             if (!checkPermission(2)) return $this->alert('error', '无权限');
             $aid = input('post.aid/d');
@@ -369,12 +351,7 @@ class Domain extends BaseController
             if (!checkPermission(2)) return $this->alert('error', '无权限');
             $ids = input('post.ids');
             if (empty($ids)) return json(['code' => -1, 'msg' => '参数不能为空']);
-            Db::name('domain')->where('id', 'in', $ids)->delete();
-            Db::name('domain_alias')->where('did', 'in', $ids)->delete();
-            Db::name('dmtask')->where('did', 'in', $ids)->delete();
-            Db::name('optimizeip')->where('did', 'in', $ids)->delete();
-            Db::name('sctask')->where('did', 'in', $ids)->delete();
-            return json(['code' => 0, 'msg' => '成功删除' . count($ids) . '个域名！']);
+            return $this->delete_local_domains($ids);
         } elseif ($act == 'updateexpire') {
             if (!checkPermission(2)) return $this->alert('error', '无权限');
             $ids = input('post.ids');
@@ -383,6 +360,27 @@ class Domain extends BaseController
             return json(['code' => 0, 'msg' => '已提交' . $count . '个域名，约' . ceil($count / 5) . '分钟后刷新完成。']);
         }
         return json(['code' => -3]);
+    }
+
+    private function delete_local_domains($values)
+    {
+        try {
+            $ids = DomainExistenceService::ids($values);
+            if (!$ids) return json(['code' => -1, 'msg' => '请选择域名']);
+            Db::startTrans();
+            try {
+                $rows = Db::name('domain')->whereIn('id', $ids)->order('id')->lock(true)->select()->toArray();
+                $count = DomainLocalDeleteService::deleteRows($rows, (int)$this->request->user['id']);
+                Db::commit();
+            } catch (\Throwable $e) {
+                Db::rollback();
+                throw $e;
+            }
+            DomainLocalDeleteService::clearCaches($rows);
+            return json(['code' => 0, 'msg' => '成功删除' . $count . '个本地域名！']);
+        } catch (\Throwable $e) {
+            return json(['code' => -1, 'msg' => '删除失败：' . $e->getMessage()]);
+        }
     }
 
     public function domain_list()

@@ -155,6 +155,9 @@
   <div class="form-group">
 	<select name="status" class="form-control"><option value="">所有状态</option><option value="1">即将到期</option><option value="2">已到期</option></select>
   </div>
+  <div class="form-group">
+    <select name="exist_status" class="form-control"><option value="">所有检测状态</option><option value="unchecked">未检测</option><option value="normal">正常</option><option value="missing">远端未找到</option><option value="changed">域名 ID 不一致</option><option value="failed">检测失败</option><option value="unsupported">暂不支持</option></select>
+  </div>
   <button type="submit" class="btn btn-primary"><i class="fa fa-search"></i> 搜索</button>
   <a href="javascript:searchClear()" class="btn btn-default" title="刷新域名列表"><i class="fa fa-refresh"></i> 刷新</a>
   <a href="javascript:copySelected()" class="btn btn-default" title="复制选中域名"><i class="fa fa-copy"></i> 复制选中</a>
@@ -164,7 +167,49 @@
 	<ul class="dropdown-menu"><li><a href="/domain/add">添加域名</a></li><li><a href="javascript:operation('setcategory')">设置分类</a></li><li><a href="javascript:operation('editremark')">修改域名备注</a></li><li><a href="javascript:operation('opennotice')">开启到期提醒</a></li><li><a href="javascript:operation('closenotice')">关闭到期提醒</a></li><li><a href="javascript:operation('updateexpire')">刷新到期时间</a></li><li><a href="javascript:copySelected()">复制到剪贴板</a></li><li><a href="javascript:operation('delete')">删除域名</a></li><li role="separator" class="divider"></li><li><a href="javascript:operation('addrecord')">添加解析</a></li><li><a href="javascript:operation('editrecord')">修改解析</a></li><li><a href="/record/search">按记录值搜索</a></li><li><a href="/record/smartparse">智能添加解析</a></li></ul>
   </div>
   <a href="/domain/expirenotice" class="btn btn-default">到期提醒设置</a>{/if}
+  {if $user['level'] eq 2}
+  <div class="btn-group">
+    <button type="button" class="btn btn-info dropdown-toggle" data-toggle="dropdown">检测域名 <span class="caret"></span></button>
+    <ul class="dropdown-menu">
+      <li><a href="javascript:domainExistence.start('selected')">检测选中域名</a></li>
+      <li><a href="javascript:domainExistence.start('filtered')">检测当前筛选结果（全部分页）</a></li>
+      <li><a href="javascript:domainExistence.chooseAccount()">检测指定账户全部域名</a></li>
+      <li role="separator" class="divider"></li>
+      <li><a href="javascript:domainExistence.cleanupSelected()">复查并清理选中异常域名</a></li>
+      <li><a href="javascript:domainExistence.cleanupFiltered()">复查并清理筛选内全部未找到域名</a></li>
+      <li><a href="javascript:domainExistence.openLast()">查看 / 继续上次任务</a></li>
+    </ul>
+  </div>
+  {/if}
 </form>
+
+{if $user['level'] eq 2}
+<div class="modal fade" id="domainCheckAccountModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-sm"><div class="modal-content">
+    <div class="modal-header"><button type="button" class="close" data-dismiss="modal">&times;</button><h4 class="modal-title">选择检测账户</h4></div>
+    <div class="modal-body"><select id="domainCheckAccount" class="form-control">{foreach $accounts as $account}<option value="{$account.id}">{$account.name}</option>{/foreach}</select></div>
+    <div class="modal-footer"><button type="button" class="btn btn-info" onclick="domainExistence.startAccount()">开始检测</button></div>
+  </div></div>
+</div>
+<div class="modal fade" id="domainCheckModal" tabindex="-1" role="dialog" data-backdrop="static">
+  <div class="modal-dialog modal-lg"><div class="modal-content">
+    <div class="modal-header"><button type="button" class="close" data-dismiss="modal">&times;</button><h4 class="modal-title" id="domainCheckTitle">域名存在性检测</h4></div>
+    <div class="modal-body">
+      <p class="text-muted">“远端未找到”表示当前凭据可见的完整列表中没有该域名，可能已删除、已转移或无访问权限。清理将删除本地记录及关联任务。</p>
+      <div class="progress"><div id="domainCheckProgress" class="progress-bar" style="width:0%">0%</div></div>
+      <p id="domainCheckMessage" role="status"></p><p id="domainCheckCounts"></p>
+      <div class="form-inline" id="domainCheckResultToolbar">
+        <select id="domainCheckResultStatus" class="form-control"><option value="">全部结果</option><option value="normal">正常</option><option value="missing">远端未找到</option><option value="changed">ID 不一致</option><option value="failed">检测失败</option><option value="unsupported">暂不支持</option><option value="deleted">已清理</option><option value="skipped">已跳过</option></select>
+        <button type="button" class="btn btn-danger" id="domainCheckCleanupSelected" onclick="domainExistence.cleanupResults()">清理勾选的未找到域名</button>
+        <button type="button" class="btn btn-danger" id="domainCheckCleanupAll" onclick="domainExistence.cleanupAllResults()">选择并清理全部未找到（跨分页）</button>
+        <span id="domainCheckSelectedCount" class="text-muted"></span>
+      </div>
+      <table id="domainCheckResults"></table>
+    </div>
+    <div class="modal-footer"><button type="button" id="domainCheckPause" class="btn btn-default" onclick="domainExistence.pause()">暂停</button><button type="button" id="domainCheckResume" class="btn btn-info" onclick="domainExistence.resume()">继续任务</button><button type="button" class="btn btn-default" data-dismiss="modal">关闭</button></div>
+  </div></div>
+</div>
+{/if}
 
       <table id="listTable">
 	  </table>
@@ -183,8 +228,10 @@
 <script src="/static/js/select2-4.0.13.min.js"></script>
 <script src="/static/js/select2-i18n-zh-CN-4.0.13.min.js"></script>
 <script src="/static/js/custom.js?v=1006"></script>
+<script src="/static/js/domain-existence.js?v=1053"></script>
 <script>
 var userLevel = "{$user['level']|default=''}";
+var domainCheckUserId = "{$user['id']}";
 $(document).ready(function(){
 	updateToolbar();
 	const pageSizeKey = 'domain_pagesize';
@@ -233,6 +280,13 @@ $(document).ready(function(){
 				title: '记录数',
 				sortable: true
 			},
+            {
+                field: 'exist_status', title: '检测状态', sortable: true,
+                formatter: function(value, row) {
+                    return domainExistence.statusHtml(value, row.exist_message) + ' <a href="javascript:domainExistence.detail(' + row.id + ')" title="查看检测详情"><i class="fa fa-info-circle"></i></a>';
+                }
+            },
+            {field: 'exist_checked_at', title: '最近检测时间', sortable: true, formatter: function(value) { return value || '-'; }},
 			{
 				field: 'addtime',
 				title: '添加时间',
@@ -330,6 +384,8 @@ $(document).ready(function(){
 				formatter: function(value, row, index) {
 					var html = '<a href="/record/'+row.id+'" class="btn btn-success btn-xs" onclick="loading()">解析</a>';
 					if(userLevel == '2'){
+						html += ' <a href="javascript:domainExistence.startSingle('+row.id+')" class="btn btn-default btn-xs">检测</a>';
+						if(row.exist_status === 'missing') html += ' <a href="javascript:domainExistence.cleanupSingle('+row.id+')" class="btn btn-warning btn-xs">复查清理</a>';
 						html += ' <a href="javascript:editframe('+row.id+')" class="btn btn-info btn-xs">配置</a>';
 						html += ' <a href="javascript:delItem('+row.id+')" class="btn btn-danger btn-xs">删除</a>';
 					}

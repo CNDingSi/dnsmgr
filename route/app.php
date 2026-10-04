@@ -85,6 +85,10 @@ Route::group(function () {
     Route::any('/domain/expirenotice', 'domain/expire_notice');
     Route::post('/domain/updatedate', 'domain/update_date');
     Route::post('/domain/data', 'domain/domain_data');
+    Route::post('/domain/check/start', 'domainCheck/start');
+    Route::post('/domain/check/status', 'domainCheck/status');
+    Route::post('/domain/check/step', 'domainCheck/step');
+    Route::post('/domain/check/results', 'domainCheck/results');
     Route::post('/domain/op', 'domain/domain_op');
     Route::post('/domain/list', 'domain/domain_list');
     Route::any('/domain/dnscheck', 'domain/dnscheck');

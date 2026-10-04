@@ -57,10 +57,19 @@ class dynv6 implements DnsInterface
     {
         $data = $this->send_request('GET', '/zones');
         if ($data !== false) {
+            if (!is_array($data) || !array_is_list($data)) {
+                $this->setError('返回的域名列表格式不正确');
+                return false;
+            }
             $list = [];
             // API 返回直接数组，不是 {zones: [...]}
             if (is_array($data)) {
                 foreach ($data as $row) {
+                    if (!is_array($row) || !isset($row['name'], $row['id']) || !is_scalar($row['name'])
+                        || !is_scalar($row['id']) || trim((string)$row['name']) === '' || trim((string)$row['id']) === '') {
+                        $this->setError('返回的域名信息不完整');
+                        return false;
+                    }
                     $zoneName = isset($row['name']) ? $row['name'] : '';
                     $zoneId = isset($row['id']) ? $row['id'] : 0;
                     if (!empty($zoneName)) {
@@ -360,6 +369,11 @@ class dynv6 implements DnsInterface
         
         // 2xx成功
         if ($statusCode >= 200 && $statusCode < 300) {
+            if ($method === 'GET' && $path === '/zones'
+                && (!is_array($arr) || !array_is_list($arr) || !str_starts_with(ltrim($response['body']), '['))) {
+                $this->setError('返回的域名列表格式不正确');
+                return false;
+            }
             return $arr !== null ? $arr : true;
         }
         

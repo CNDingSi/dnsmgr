@@ -213,3 +213,9 @@ CREATE TABLE IF NOT EXISTS `dnsmgr_domain_category` (
 ALTER TABLE `dnsmgr_domain`
 ADD COLUMN `cid` int(11) unsigned NOT NULL DEFAULT '0',
 ADD KEY `cid` (`cid`);
+
+ALTER TABLE `dnsmgr_domain` ADD COLUMN `exist_status` varchar(20) NOT NULL DEFAULT 'unchecked';
+ALTER TABLE `dnsmgr_domain` ADD COLUMN `exist_checked_at` datetime DEFAULT NULL;
+ALTER TABLE `dnsmgr_domain` ADD COLUMN `exist_message` varchar(500) DEFAULT NULL;
+ALTER TABLE `dnsmgr_domain` ADD COLUMN `exist_remote_id` varchar(255) DEFAULT NULL;
+ALTER TABLE `dnsmgr_domain` ADD KEY `exist_status` (`exist_status`);
