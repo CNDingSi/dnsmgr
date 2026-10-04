@@ -38,7 +38,9 @@ class Cert extends BaseController
 
         $select = Db::name('cert_account')->where('deploy', $deploy);
         if (!empty($kw)) {
-            $select->whereLike('name|remark', '%' . $kw . '%')->whereOr('id', $kw);
+            $select->where(function ($query) use ($kw) {
+                $query->whereLike('name|remark', '%' . $kw . '%')->whereOr('id', $kw);
+            });
         }
         $total = $select->count();
         $allowedSort = ['id' => 'id', 'typename' => 'type', 'name' => 'name', 'remark' => 'remark', 'addtime' => 'addtime'];
@@ -467,8 +469,8 @@ class Cert extends BaseController
             }
         } elseif ($action == 'show_log') {
             $processid = input('post.processid');
-            $file = app()->getRuntimePath() . 'log/' . $processid . '.log';
-            if (!file_exists($file)) return json(['code' => -1, 'msg' => '日志文件不存在']);
+            $file = $this->getProcessLogFile($processid);
+            if ($file === false) return json(['code' => -1, 'msg' => '日志文件不存在']);
             return json(['code' => 0, 'data' => file_get_contents($file), 'time' => filemtime($file)]);
         } elseif ($action == 'operation') {
             $ids = input('post.ids');
@@ -507,6 +509,9 @@ class Cert extends BaseController
     {
         $account = Db::name('cert_account')->where('id', $order['aid'])->find();
         if (!$account) return ['code' => -1, 'msg' => 'SSL证书账户不存在'];
+        if (empty($account['type']) || !isset(CertHelper::$cert_config[$account['type']])) {
+            return ['code' => -1, 'msg' => 'SSL证书账户类型不存在'];
+        }
         $max_domains = CertHelper::$cert_config[$account['type']]['max_domains'];
         $wildcard = CertHelper::$cert_config[$account['type']]['wildcard'];
         $cname = CertHelper::$cert_config[$account['type']]['cname'];
@@ -576,7 +581,7 @@ class Cert extends BaseController
         if (empty($domains)) return ['code' => -1, 'msg' => '证书绑定域名不能为空'];
         $issuetime = date('Y-m-d H:i:s', $certInfo['validFrom_time_t']);
         $expiretime = date('Y-m-d H:i:s', $certInfo['validTo_time_t']);
-        $issuer = $certInfo['issuer']['CN'];
+        $issuer = $certInfo['issuer']['CN'] ?? ($certInfo['issuer']['O'] ?? '');
         return [
             'code' => 0,
             'keytype' => $keytype,
@@ -610,6 +615,7 @@ class Cert extends BaseController
             } elseif ($retcode == 1) {
                 return json(['code' => 0, 'msg' => '添加DNS记录成功！请等待DNS生效后点击验证']);
             }
+            return json(['code' => 0, 'msg' => '证书处理完成']);
         } catch (Exception $e) {
             return json(['code' => -1, 'msg' => $e->getMessage(), 'trace' => $e->getTrace()]);
         }
@@ -768,8 +774,8 @@ class Cert extends BaseController
             }
         } elseif ($action == 'show_log') {
             $processid = input('post.processid');
-            $file = app()->getRuntimePath() . 'log/' . $processid . '.log';
-            if (!file_exists($file)) return json(['code' => -1, 'msg' => '日志文件不存在']);
+            $file = $this->getProcessLogFile($processid);
+            if ($file === false) return json(['code' => -1, 'msg' => '日志文件不存在']);
             return json(['code' => 0, 'data' => file_get_contents($file), 'time' => filemtime($file)]);
         } elseif ($action == 'operation') {
             $ids = input('post.ids');
@@ -857,7 +863,8 @@ class Cert extends BaseController
             if ($row['aid'] == 0) {
                 $name = $row['id'] . '_' . $domainstr . '（手动续期）';
             } else {
-                $name = $row['id'] . '_' . $domainstr . '（' . CertHelper::$cert_config[$row['type']]['name'] . '）';
+                $certName = (!empty($row['type']) && isset(CertHelper::$cert_config[$row['type']])) ? CertHelper::$cert_config[$row['type']]['name'] : ($row['type'] ?: '未知');
+                $name = $row['id'] . '_' . $domainstr . '（' . $certName . '）';
             }
             $orders[$row['id']] = ['name' => $name];
         }
@@ -987,6 +994,27 @@ class Cert extends BaseController
             }
             return json(['code' => 0, 'status' => $status]);
         }
+        return json(['code' => -3]);
+    }
+
+    private function getProcessLogFile($processid)
+    {
+        if (!is_string($processid) || !preg_match('/^[a-f0-9]{32}$/i', $processid)) {
+            return false;
+        }
+        $logDir = realpath(app()->getRuntimePath() . 'log');
+        if ($logDir === false) {
+            return false;
+        }
+        $file = $logDir . DIRECTORY_SEPARATOR . $processid . '.log';
+        if (!is_file($file)) {
+            return false;
+        }
+        $realFile = realpath($file);
+        if ($realFile === false || !str_starts_with($realFile, $logDir . DIRECTORY_SEPARATOR)) {
+            return false;
+        }
+        return $realFile;
     }
 
     public function certset()

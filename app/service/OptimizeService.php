@@ -200,6 +200,9 @@ class OptimizeService
             $info = $this->get_ip_address2($row['cdn_type'], $ip_type);
 
             $dns = DnsHelper::getModel($drow['aid'], $drow['name'], $drow['thirdid']);
+            if (!$dns) {
+                throw new Exception('DNS模块不存在');
+            }
             $domainRecords = $dns->getSubDomainRecords($row['rr'], 1, 100);
             if (!$domainRecords) {
                 throw new Exception('获取记录列表失败，'.$dns->getError());

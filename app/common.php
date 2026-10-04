@@ -36,6 +36,8 @@ function get_curl($url, $post = 0, $referer = 0, $cookie = 0, $ua = 0, $nobody =
             $options['body'] = $post;
         }
     }
+    // 规范化头部
+    $options['headers'] = normalize_http_headers($options['headers']);
 
     try {
         $client = new Client();
@@ -71,31 +73,15 @@ function real_ip($type = 0)
     return $ip;
 }
 
-function strexists($string, $find)
-{
-    return !(strpos($string, $find) === FALSE);
-}
-
-function dstrpos($string, $arr)
-{
-    if (empty($string)) return false;
-    foreach ((array)$arr as $v) {
-        if (strpos($string, $v) !== false) {
-            return true;
-        }
-    }
-    return false;
-}
-
 function checkmobile()
 {
-    $useragent = strtolower($_SERVER['HTTP_USER_AGENT']);
+    $useragent = strtolower(request()->header('user-agent', ''));
     $ualist = array('android', 'midp', 'nokia', 'mobile', 'iphone', 'ipod', 'blackberry', 'windows phone');
-    if ((dstrpos($useragent, $ualist) || strexists($_SERVER['HTTP_ACCEPT'], "VND.WAP") || strexists($_SERVER['HTTP_VIA'], "wap"))) {
-        return true;
-    } else {
-        return false;
+    foreach ($ualist as $ua) {
+        if (str_contains($useragent, $ua)) return true;
     }
+    if (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], "VND.WAP") || isset($_SERVER['HTTP_VIA']) && str_contains($_SERVER['HTTP_VIA'], "wap")) return true;
+    return false;
 }
 
 function authcode($string, $operation = 'DECODE', $key = '', $expiry = 0)
@@ -161,10 +147,10 @@ function checkDomain($domain)
 function getSubstr($str, $leftStr, $rightStr)
 {
     $left = strpos($str, $leftStr);
+    if ($left === false) return '';
     $start = $left + strlen($leftStr);
     $right = strpos($str, $rightStr, $start);
-    if ($left < 0) return '';
-    if ($right > 0) {
+    if ($right !== false) {
         return substr($str, $start, $right - $start);
     } else {
         return substr($str, $start);
@@ -182,6 +168,9 @@ function checkRefererHost()
         return false;
     }
     $url_arr = parse_url(Request::header('referer'));
+    if (!is_array($url_arr) || empty($url_arr['host'])) {
+        return false;
+    }
     $http_host = Request::header('host');
     if (strpos($http_host, ':')) {
         $http_host = substr($http_host, 0, strpos($http_host, ':'));
@@ -253,7 +242,7 @@ function config_get($key, $default = null, $force = false)
     } else {
         $value = config('sys.' . $key);
     }
-    return $value ?: $default;
+    return isNullOrEmpty($value) ? $default : $value;
 }
 
 function config_set($key, $value)
@@ -304,6 +293,7 @@ function getMainDomain($host)
         $domains = Db::name('domain')->column('name');
         $domains_alias = Db::name('domain_alias')->column('name');
         $domains = array_merge($domains, $domains_alias);
+        usort($domains, fn($a, $b) => strlen($b) <=> strlen($a));
         config(['domains'=>$domains], 'temp');
     }
     foreach ($domains as $domain) {
@@ -392,6 +382,39 @@ function clearDirectory($dir): bool
         }
     }
     return true;
+}
+
+/**
+ * 规范化请求头，将标量值转为字符串，剔除 null 等非法值，避免 GuzzleHttp 类型校验异常
+ *
+ * @param array $headers 原始请求头
+ * @return array 规范化后的请求头
+ */
+function normalize_http_headers($headers)
+{
+    $result = [];
+    foreach ((array)$headers as $name => $value) {
+        if (is_array($value)) {
+            $items = [];
+            foreach ($value as $item) {
+                if (is_string($item)) {
+                    $items[] = $item;
+                } elseif (is_scalar($item)) {
+                    $items[] = (string)$item;
+                }
+            }
+            if ($items) {
+                $result[$name] = $items;
+            }
+        } elseif (is_string($value)) {
+            $result[$name] = $value;
+        } elseif (is_scalar($value)) {
+            // 转为字符串
+            $result[$name] = (string)$value;
+        }
+        // 忽略 null 等非法值
+    }
+    return $result;
 }
 
 /**
@@ -506,6 +529,8 @@ function http_request($url, $data = null, $referer = null, $cookie = null, $head
         $proxy_string .= $proxy_server . ':' . $proxy_port;
         $options['proxy'] = $proxy_string;
     }
+    // 规范化头部
+    $options['headers'] = normalize_http_headers($options['headers']);
 
     try {
         $client = new Client();

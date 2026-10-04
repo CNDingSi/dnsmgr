@@ -57,6 +57,9 @@ class MsgNotice
             $content = "<strong>".$mail_title."</strong>\n".strip_tags($content);
             self::send_telegram_bot($content);
         }
+        if (config_get('notice_qqbot') == 1) {
+            self::send_qqbot($mail_title, $mail_content);
+        }
         if (config_get('notice_webhook') == 1) {
             $content = str_replace(['<br/>', '<b>', '</b>'], ["\n", '**', '**'], $mail_content);
             self::send_webhook($mail_title, $content);
@@ -81,21 +84,23 @@ class MsgNotice
             $mail_content = '尊敬的用户，您好：您有一张SSL证书将在'.config_get('cert_renewdays', 7).'天后到期，该证书为手动续期证书，请及时续期！<br/><b>证书域名：</b> '.implode('、', $domainList).'<br/><b>签发时间：</b> '.$row['issuetime'].'<br/><b>到期时间：</b> '.$row['expiretime'].'<br/><b>颁发机构：</b> '.$row['issuer'];
         } else {
             $type = Db::name('cert_account')->where('id', $row['aid'])->value('type');
+            $typename = (!empty($type) && isset(CertHelper::$cert_config[$type])) ? CertHelper::$cert_config[$type]['name'] : ($type ?: '未知');
             if ($result) {
                 if (count($domainList) > 1) {
                     $mail_title = $domainList[0] . '等' . count($domainList) . '个域名SSL证书签发成功通知';
                 } else {
                     $mail_title = $domainList[0] . '域名SSL证书签发成功通知';
                 }
-                $mail_content = '尊敬的用户，您好：您的SSL证书已签发成功！<br/><b>证书账户：</b> '.CertHelper::$cert_config[$type]['name'].'('.$row['aid'].')<br/><b>证书域名：</b> '.implode('、', $domainList).'<br/><b>签发时间：</b> '.$row['issuetime'].'<br/><b>到期时间：</b> '.$row['expiretime'].'<br/><b>颁发机构：</b> '.$row['issuer'];
+                $mail_content = '尊敬的用户，您好：您的SSL证书已签发成功！<br/><b>证书账户：</b> '.$typename.'('.$row['aid'].')<br/><b>证书域名：</b> '.implode('、', $domainList).'<br/><b>签发时间：</b> '.$row['issuetime'].'<br/><b>到期时间：</b> '.$row['expiretime'].'<br/><b>颁发机构：</b> '.$row['issuer'];
             } else {
                 $status_arr = [0 => '失败', -1 => '购买证书失败', -2 => '创建订单失败', -3 => '添加DNS失败', -4 => '验证DNS失败', -5 => '验证订单失败', -6 => '订单验证未通过', -7 => '签发证书失败'];
+                $status_name = $status_arr[$row['status']] ?? '处理失败';
                 if(count($domainList) > 1){
-                    $mail_title = $domainList[0].'等'.count($domainList).'个域名SSL证书'.$status_arr[$row['status']].'通知';
+                    $mail_title = $domainList[0].'等'.count($domainList).'个域名SSL证书'.$status_name.'通知';
                 }else{
-                    $mail_title = $domainList[0].'域名SSL证书'.$status_arr[$row['status']].'通知';
+                    $mail_title = $domainList[0].'域名SSL证书'.$status_name.'通知';
                 }
-                $mail_content = '尊敬的用户，您好：您的SSL证书'.$status_arr[$row['status']].'！<br/><b>证书账户：</b> '.CertHelper::$cert_config[$type]['name'].'('.$row['aid'].')<br/><b>证书域名：</b> '.implode('、', $domainList).'<br/><b>失败时间：</b> '.date('Y-m-d H:i:s').'<br/><b>失败原因：</b> <font color="warning">'.$row['error'].'</font>';
+                $mail_content = '尊敬的用户，您好：您的SSL证书'.$status_name.'！<br/><b>证书账户：</b> '.$typename.'('.$row['aid'].')<br/><b>证书域名：</b> '.implode('、', $domainList).'<br/><b>失败时间：</b> '.date('Y-m-d H:i:s').'<br/><b>失败原因：</b> <font color="warning">'.$row['error'].'</font>';
             }
         }
         $mail_content .= '<br/><font color="grey">'.self::$sitename.'</font><br/><font color="grey">'.date('Y-m-d H:i:s').'</font>';
@@ -109,8 +114,9 @@ class MsgNotice
         $row = Db::name('cert_deploy')->field('id,aid,oid,remark,status,error')->where('id', $id)->find();
         if (!$row) return;
         $account = Db::name('cert_account')->field('id,type,name,remark')->where('id', $row['aid'])->find();
+        if (!$account) return;
         $domainList = Db::name('cert_domain')->where('oid', $row['oid'])->column('domain');
-        $typename = DeployHelper::$deploy_config[$account['type']]['name'];
+        $typename = (!empty($account['type']) && isset(DeployHelper::$deploy_config[$account['type']])) ? DeployHelper::$deploy_config[$account['type']]['name'] : ($account['type'] ?: '未知');
         $mail_title = $typename;
         if(!empty($row['remark'])) $mail_title .= '('.$row['remark'].')';
         $mail_title .= 'SSL证书部署'.($result?'成功':'失败').'通知';
@@ -139,6 +145,9 @@ class MsgNotice
             $content = str_replace('<br/>', "\n", $mail_content);
             $content = "<strong>".$mail_title."</strong>\n".strip_tags($content);
             self::send_telegram_bot($content);
+        }
+        if (config_get('cert_notice_qqbot') == 1 || config_get('cert_notice_qqbot') == 2 && !$result) {
+            self::send_qqbot($mail_title, $mail_content);
         }
         if (config_get('cert_notice_webhook') == 1) {
             $content = str_replace(['*', '<br/>', '<b>', '</b>'], ['\*', "\n", '**', '**'], $mail_content);
@@ -170,6 +179,9 @@ class MsgNotice
             $content = str_replace('<br/>', "\n", $mail_content);
             $content = "<strong>".$mail_title."</strong>\n".strip_tags($content);
             self::send_telegram_bot($content);
+        }
+        if (config_get('expire_notice_qqbot') == 1 || config_get('expire_notice_qqbot') == 2) {
+            self::send_qqbot($mail_title, $mail_content);
         }
         if (config_get('expire_notice_webhook') == 1) {
             $content = str_replace(['*', '<br/>', '<b>', '</b>'], ['\*', "\n", '**', '**'], $mail_content);
@@ -255,6 +267,10 @@ class MsgNotice
         }
         $url = $tgbot_url.'/bot'.$tgbot_token.'/sendMessage';
         $post = ['chat_id' => $tgbot_chatid, 'text' => $content, 'parse_mode' => 'HTML'];
+        $tgbot_topicid = intval(config_get('tgbot_topicid'));
+        if ($tgbot_topicid > 0) {
+            $post['message_thread_id'] = $tgbot_topicid;
+        }
         $result = self::telegram_curl($url, http_build_query($post));
         if (!$result) return '请求失败';
         $arr = json_decode($result, true);
@@ -262,6 +278,20 @@ class MsgNotice
             return true;
         } else {
             return $arr['description'] ?? '请求失败';
+        }
+    }
+
+    public static function send_qqbot($title, $content)
+    {
+        $appId = config_get('qqbot_appid');
+        $appSecret = config_get('qqbot_appsecret');
+        $openid = config_get('qqbot_openid');
+        if (!$appId || !$appSecret || !$openid) return false;
+        try {
+            $bot = new \app\lib\QqBot($appId, $appSecret);
+            return $bot->sendMarkdown($openid, \app\lib\QqBot::toMarkdown($title, $content));
+        } catch (\Exception $e) {
+            return $e->getMessage();
         }
     }
 

@@ -14,7 +14,7 @@ class CheckUtils
         $start = microtime(true);
 
         $urlarr = parse_url($url);
-        if (!$urlarr) {
+        if (!$urlarr || empty($urlarr['host'])) {
             return ['status' => false, 'errmsg' => 'Invalid URL', 'usetime' => 0];
         }
         if (str_starts_with($urlarr['host'], '[') && str_ends_with($urlarr['host'], ']')) {
@@ -126,10 +126,19 @@ class CheckUtils
             return ['status' => false, 'errmsg' => 'Invalid IP address', 'usetime' => 0];
         }
         $timeout = 1;
-        if (str_contains($target, ':')) {
-            exec('ping -6 -c 1 -w '.$timeout.' '.$target, $output, $return_var);
+        if (PHP_OS_FAMILY === 'Windows') {
+            $waitMs = $timeout * 1000;
+            if (str_contains($target, ':')) {
+                exec('ping -6 -n 1 -w '.$waitMs.' '.$target, $output, $return_var);
+            } else {
+                exec('ping -n 1 -w '.$waitMs.' '.$target, $output, $return_var);
+            }
         } else {
-            exec('ping -c 1 -w '.$timeout.' '.$target, $output, $return_var);
+            if (str_contains($target, ':')) {
+                exec('ping -6 -c 1 -w '.$timeout.' '.$target, $output, $return_var);
+            } else {
+                exec('ping -c 1 -w '.$timeout.' '.$target, $output, $return_var);
+            }
         }
         if (!empty($output[1])) {
             if (strpos($output[1], '毫秒') !== false) {

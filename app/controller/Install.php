@@ -46,12 +46,12 @@ class Install extends BaseController
                     $value = trim($value);
                     if (empty($value)) continue;
                     $value = str_replace('dnsmgr_', $mysql_prefix, $value);
-                    if (Db::execute($value) === false) {
-                        $error++;
-                        $dberror = Db::getErrorInfo();
-                        $errorMsg .= $dberror . "\n";
-                    } else {
+                    try {
+                        Db::execute($value);
                         $success++;
+                    } catch (Exception $e) {
+                        $error++;
+                        $errorMsg .= $e->getMessage() . "\n";
                     }
                 }
                 if (empty($errorMsg)) {
@@ -66,7 +66,7 @@ class Install extends BaseController
                 $mysql_user = input('post.mysql_user', null, 'trim');
                 $mysql_pwd = input('post.mysql_pwd', null, 'trim');
                 $mysql_name = input('post.mysql_name', null, 'trim');
-                $mysql_prefix = input('post.mysql_prefix', 'cloud_', 'trim');
+                $mysql_prefix = input('post.mysql_prefix', 'dnsmgr_', 'trim');
                 $admin_username = input('post.admin_username', null, 'trim');
                 $admin_password = input('post.admin_password', null, 'trim');
 

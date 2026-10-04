@@ -66,7 +66,10 @@ class CertOrderService
             }
         }
 
-        $cname = CertHelper::$cert_config[$this->atype]['cname'];
+        if (empty($this->atype) || !isset(CertHelper::$cert_config[$this->atype])) {
+            throw new Exception('该证书类型不存在', 102);
+        }
+        $cname = CertHelper::$cert_config[$this->atype]['cname'] ?? false;
         foreach($this->domainList as $domain){
             $mainDomain = getMainDomain($domain);
             $drow = Db::name('domain')->where('name', $mainDomain)->find();
@@ -84,7 +87,7 @@ class CertOrderService
                 $cname_row = Db::name('cert_cname')->where('domain', $domain)->where('status', 1)->find();
                 if (!$cname || !$cname_row) {
                     $errmsg = '域名'.$domain.'未在本系统添加';
-                    Db::name('cert_order')->where('id', $this->order['id'])->data(['error'=>$errmsg]);
+                    Db::name('cert_order')->where('id', $this->order['id'])->update(['error' => $errmsg]);
                     throw new Exception($errmsg, 103);
                 } else {
                     $this->cnameDomainList[] = $cname_row['id'];

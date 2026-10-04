@@ -418,6 +418,42 @@ class DnsHelper
             'add' => true,
             'sort' => true,
         ],
+        'aws' => [
+            'name' => 'AWS Route 53',
+            'icon' => 'aws.png',
+            'note' => '基于 Amazon Route 53 管理域名解析，AccessKey 需具备 Route 53 权限',
+            'config' => [
+                'AccessKeyId' => [
+                    'name' => 'AccessKeyId',
+                    'type' => 'input',
+                    'placeholder' => '',
+                    'required' => true,
+                ],
+                'SecretAccessKey' => [
+                    'name' => 'SecretAccessKey',
+                    'type' => 'input',
+                    'placeholder' => '',
+                    'required' => true,
+                ],
+                'proxy' => [
+                    'name' => '使用代理服务器',
+                    'type' => 'radio',
+                    'options' => [
+                        '0' => '否',
+                        '1' => '是',
+                    ],
+                    'value' => '0'
+                ],
+            ],
+            'remark' => 0,
+            'status' => false,
+            'redirect' => false,
+            'log' => false,
+            'weight' => false,
+            'page' => true,
+            'add' => true,
+            'sort' => false,
+        ],
         'namesilo' => [
             'name' => 'NameSilo',
             'icon' => 'namesilo.ico',
@@ -801,6 +837,36 @@ class DnsHelper
             'add' => true,
             'sort' => false,
         ],
+        'dynv6' => [
+            'name' => 'dynv6',
+            'icon' => 'dynv6.ico',
+            'note' => '',
+            'config' => [
+                'token' => [
+                    'name' => 'API Token',
+                    'type' => 'input',
+                    'placeholder' => '',
+                    'required' => true,
+                ],
+                'proxy' => [
+                    'name' => '使用代理服务器',
+                    'type' => 'radio',
+                    'options' => [
+                        '0' => '否',
+                        '1' => '是',
+                    ],
+                    'value' => '0'
+                ],
+            ],
+            'remark' => 0,
+            'status' => false,
+            'redirect' => false,
+            'log' => false,
+            'weight' => false,
+            'page' => false,
+            'add' => false,
+            'sort' => false,
+        ],
     ];
 
     public static $line_name = [
@@ -815,13 +881,14 @@ class DnsHelper
         'bt' => ['DEF' => '0', 'CT' => '285344768', 'CU' => '285345792', 'CM' => '285346816'],
         'qingcloud' => ['DEF' => '0', 'CT' => '2', 'CU' => '3', 'CM' => '4', 'AB' => '8'],
         'cloudflare' => ['DEF' => '0'],
+        'aws' => ['DEF' => 'default'],
         'namesilo' => ['DEF' => 'default'],
         'henet' => ['DEF' => 'default'],
         'powerdns' => ['DEF' => 'default'],
         'spaceship' => ['DEF' => 'default'],
         'aliyunesa' => ['DEF' => '0'],
         'tencenteo' => ['DEF' => 'Default'],
-        'cccyun' => ['DEF' => 'default'],
+        'dnsmgr' => ['DEF' => 'default'],
         'goedge' => ['DEF' => 'default'],
     ];
 
@@ -848,6 +915,7 @@ class DnsHelper
         $class = "\\app\\lib\\dns\\{$dnstype}";
         if (class_exists($class)) {
             $config = json_decode($account['config'] ?? '', true);
+            if (!is_array($config)) $config = [];
             $config['domain'] = $domain;
             $config['domainid'] = $domainid;
             $model = new $class($config);
@@ -865,6 +933,7 @@ class DnsHelper
         $class = "\\app\\lib\\dns\\{$dnstype}";
         if (class_exists($class)) {
             $config = json_decode($account['config'] ?? '', true);
+            if (!is_array($config)) $config = [];
             $config['domain'] = $account['name'];
             $config['domainid'] = $account['thirdid'];
             $model = new $class($config);

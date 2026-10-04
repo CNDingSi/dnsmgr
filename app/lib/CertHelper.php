@@ -407,6 +407,7 @@ location / {
         $class = "\\app\\lib\\cert\\{$type}";
         if (class_exists($class)) {
             $config = json_decode($account['config'], true);
+            if (!is_array($config)) $config = [];
             $ext = $account['ext'] ? json_decode($account['ext'], true) : null;
             $model = new $class($config, $ext);
             return $model;

@@ -40,6 +40,7 @@ class ScheduleService
 
         $domain = $row['rr'] . '.' . $drow['name'];
         $dns = DnsHelper::getModel2($drow);
+        if (!$dns) throw new Exception('DNS模块不存在');
         if ($row['switchtype'] == 1) {
             $res = $dns->setDomainRecordStatus($row['recordid'], '1');
             if ($res) {
@@ -63,6 +64,9 @@ class ScheduleService
             }
         } else {
             $recordinfo = json_decode($row['recordinfo'], true);
+            if (!is_array($recordinfo) || !isset($recordinfo['Line'], $recordinfo['TTL'])) {
+                throw new Exception('解析记录信息不完整，无法执行切换');
+            }
             if ($drow['type'] == 'cloudflare' && !isNullOrEmpty($row['line'])) {
                 $recordinfo['Line'] = $row['line'];
             }
@@ -88,12 +92,14 @@ class ScheduleService
                 }
             } elseif ($row['cycle'] == 1) {
                 $weekday = intval($row['switchdate']); // 0-6, 0=周日
-                $nexttime = strtotime("last Sunday +{$weekday} days {$row['switchtime']}:00");
-                if ($nexttime <= time()) {
-                    $nexttime = strtotime("+1 week", $nexttime);
-                    if ($nexttime <= time()) {
-                        $nexttime = strtotime("+1 week", $nexttime);
-                    }
+                if ($weekday < 0 || $weekday > 6) $weekday = 0;
+                $currentDow = (int)date('w');
+                $daysAhead = ($weekday - $currentDow + 7) % 7;
+                $nexttime = strtotime(date('Y-m-d') . ' ' . $row['switchtime'] . ':00');
+                if ($daysAhead > 0) {
+                    $nexttime = strtotime('+' . $daysAhead . ' day', $nexttime);
+                } elseif ($nexttime <= time()) {
+                    $nexttime = strtotime('+1 week', $nexttime);
                 }
             } else {
                 $nexttime = strtotime(date('Y-m-d') . ' ' . $row['switchtime'] . ':00');

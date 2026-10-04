@@ -27,7 +27,7 @@ class GoEdge implements DnsInterface
         $this->userType = strtolower(trim((string)($config['type'] ?? $config['usertype'] ?? 'admin')));
         $this->nsClusterId = (int)($config['nsClusterId'] ?? 0);
         $this->userId = (int)($config['userId'] ?? 0);
-        $this->proxy = filter_var($config['proxy'] ?? false, FILTER_VALIDATE_BOOLEAN) || $config['proxy'] === 1 || $config['proxy'] === '1';
+        $this->proxy = filter_var($config['proxy'] ?? false, FILTER_VALIDATE_BOOLEAN) || ($config['proxy'] ?? null) === 1 || ($config['proxy'] ?? null) === '1';
         $this->domain = isset($config['domain']) ? (string)$config['domain'] : null;
         $this->domainId = isset($config['domainid']) && $config['domainid'] !== '' ? (string)$config['domainid'] : null;
     }

@@ -20,7 +20,8 @@ class letsencrypt implements CertInterface
     {
         $this->config = $config;
         if (empty($config['mode'])) $config['mode'] = 'live';
-        $this->ac = new ACMECert($this->directories[$config['mode']], (int)$config['proxy']);
+        if (!isset($this->directories[$config['mode']])) $config['mode'] = 'live';
+        $this->ac = new ACMECert($this->directories[$config['mode']], (int)($config['proxy'] ?? 0));
         if ($ext) {
             $this->ext = $ext;
             $this->ac->loadAccountKey($ext['key']);

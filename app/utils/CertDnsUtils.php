@@ -39,6 +39,7 @@ class CertDnsUtils
             }
             if (empty($list)) continue;
             $dns = DnsHelper::getModel($drow['aid'], $drow['name'], $drow['thirdid']);
+            if (!$dns) throw new Exception('DNS模块不存在');
             usort($list, function ($a, $b) {
                 return strcmp($a['name'], $b['name']);
             });
@@ -74,7 +75,8 @@ class CertDnsUtils
                 }
 
                 $ttl = $drow['type'] == 'namesilo' ? 3600 : 600;
-                $res = $dns->addDomainRecord($row['name'], $row['type'], $row['value'], DnsHelper::$line_name[$drow['type']]['DEF'], $ttl);
+                $line = DnsHelper::$line_name[$drow['type']]['DEF'] ?? 'default';
+                $res = $dns->addDomainRecord($row['name'], $row['type'], $row['value'], $line, $ttl);
                 if (!$res && $row['type'] != 'CAA') throw new Exception('添加'.$domain.'解析记录失败，' . $dns->getError());
                 $log('Add DNS Record: '.$domain.' '.$row['type'].' '.$row['value']);
             }
@@ -131,6 +133,7 @@ class CertDnsUtils
             }
             if (empty($list)) continue;
             $dns = DnsHelper::getModel($drow['aid'], $drow['name'], $drow['thirdid']);
+            if (!$dns) throw new Exception('DNS模块不存在');
             usort($list, function ($a, $b) {
                 return strcmp($a['name'], $b['name']);
             });

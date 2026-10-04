@@ -16,7 +16,7 @@ class zerossl implements CertInterface
     public function __construct($config, $ext = null)
     {
         $this->config = $config;
-        $this->ac = new ACMECert($this->directory, (int)$config['proxy']);
+        $this->ac = new ACMECert($this->directory, (int)($config['proxy'] ?? 0));
         if ($ext) {
             $this->ext = $ext;
             $this->ac->loadAccountKey($ext['key']);

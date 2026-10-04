@@ -20,8 +20,9 @@ class google implements CertInterface
     {
         $this->config = $config;
         if (empty($config['mode'])) $config['mode'] = 'live';
+        if (!isset($this->directories[$config['mode']])) $config['mode'] = 'live';
         if (empty($config['proxy_url'])) $config['proxy_url'] = '';
-        $this->ac = new ACMECert($this->directories[$config['mode']] . '/directory', (int)$config['proxy'], [
+        $this->ac = new ACMECert($this->directories[$config['mode']] . '/directory', (int)($config['proxy'] ?? 0), [
             'origin' => $this->directories[$config['mode']],
             'proxy' => rtrim($config['proxy_url'], '/'),
         ]);
