@@ -64,6 +64,13 @@
         <label class="col-sm-3 control-label no-padding-right" is-required>绑定域名</label>
         <div class="col-sm-6">
             <textarea name="domains" v-model="domains" class="form-control" rows="5" placeholder="请输入域名，一行一个" required></textarea>
+            <div v-if="action=='add'" class="checkbox">
+                <label><input type="checkbox" v-model="addWildcard"> 为每行域名添加 *. 泛域名前缀</label>
+            </div>
+            <div v-if="action=='add' && addWildcard && preparedDomains.length" class="help-block">
+                实际提交的域名（已带 *. 前缀的域名不会重复添加）：
+                <pre style="max-height:150px;overflow:auto;white-space:pre-wrap;word-break:break-all">{{preparedDomains.join('\n')}}</pre>
+            </div>
         </div>
     </div>
 
@@ -89,6 +96,7 @@ new Vue({
         action: '{$action}',
         type: '',
         domains: '',
+        addWildcard: false,
         set: {
             id: '',
             aid: '',
@@ -109,6 +117,17 @@ new Vue({
             {label:'P-384',value:'384',type:'ECC'},
         ],
         keysizeList: [],
+    },
+    computed: {
+        preparedDomains: function(){
+            var addWildcard = this.action == 'add' && this.set.aid != -1 && this.addWildcard;
+            return this.set.domains.map(function(domain){
+                domain = domain.trim();
+                return addWildcard && domain.indexOf('*.') !== 0 ? '*.' + domain : domain;
+            }).filter(function(domain, index, domains){
+                return domains.indexOf(domain) === index;
+            });
+        }
     },
     watch: {
         'set.aid': function(val){
@@ -142,6 +161,9 @@ new Vue({
         $('[data-toggle="tooltip"]').tooltip();
     },
     methods: {
+        orderPayload: function(domains){
+            return Object.assign({}, this.set, {domains: domains || this.preparedDomains});
+        },
         submit(){
             var that=this;
             $("#taskform").data("bootstrapValidator").validate();
@@ -152,7 +174,7 @@ new Vue({
             $.ajax({
                 type: "POST",
                 url: "",
-                data: this.set,
+                data: this.orderPayload(),
                 dataType: 'json',
                 success: function(data) {
                     layer.close(ii);
@@ -179,19 +201,20 @@ new Vue({
             if(!$("#taskform").data("bootstrapValidator").isValid()){
                 return false;
             }
-            if(this.set.domains.length <= 1){
+            var domains = this.preparedDomains.slice();
+            if(domains.length <= 1){
                 this.submit();
                 return;
             }
-            layer.confirm('将 '+this.set.domains.length+' 个域名分别单独提交为 '+this.set.domains.length+' 个独立的证书订单，是否继续？', {
+            layer.confirm('将 '+domains.length+' 个域名分别单独提交为 '+domains.length+' 个独立的证书订单，是否继续？', {
                 btn: ['确定','取消'], title: '单独提交', icon: 3
             }, function(){
                 layer.closeAll('dialog');
-                that.doSubmitEach();
+                that.doSubmitEach(domains);
             });
         },
         submitOne(domain){
-            var payload = Object.assign({}, this.set, {domains: [domain]});
+            var payload = this.orderPayload([domain]);
             return new Promise((resolve, reject) => {
                 $.ajax({
                     type: "POST",
@@ -207,11 +230,11 @@ new Vue({
                 });
             });
         },
-        async doSubmitEach(){
+        async doSubmitEach(domains){
             var success = 0, fail = 0, errors = [];
-            for(var i=0; i<this.set.domains.length; i++){
-                var domain = this.set.domains[i];
-                var ii = layer.msg('正在提交（'+(i+1)+'/'+this.set.domains.length+'）：'+domain, {icon: 16, shade: 0.1, time: 0});
+            for(var i=0; i<domains.length; i++){
+                var domain = domains[i];
+                var ii = layer.msg('正在提交（'+(i+1)+'/'+domains.length+'）：'+domain, {icon: 16, shade: 0.1, time: 0});
                 try{
                     var data = await this.submitOne(domain);
                     layer.close(ii);

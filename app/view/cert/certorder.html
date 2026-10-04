@@ -38,7 +38,7 @@ pre.pre-log{height: 330px;overflow-y: auto;width: 100%;background-color: rgba(51
   </div>
   <div class="btn-group" role="group">
 	<button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">批量操作 <span class="caret"></span></button>
-	<ul class="dropdown-menu"><li><a href="javascript:operation('delete')">删除</a></li><li><a href="javascript:operation('reset')">重置订单</a></li><li><a href="javascript:operation('open')">开启续签</a></li><li><a href="javascript:operation('close')">关闭续签</a></li></ul>
+	<ul class="dropdown-menu"><li><a href="javascript:operation('submit')">批量提交</a></li><li><a href="javascript:operation('verify')">批量验证</a></li><li role="separator" class="divider"></li><li><a href="javascript:operation('delete')">删除</a></li><li><a href="javascript:operation('force_delete')">强制删除（含部署任务）</a></li><li><a href="javascript:operation('reset')">重置订单</a></li><li><a href="javascript:operation('open')">开启续签</a></li><li><a href="javascript:operation('close')">关闭续签</a></li></ul>
   </div>
   
 </form>
@@ -56,6 +56,7 @@ pre.pre-log{height: 330px;overflow-y: auto;width: 100%;background-color: rgba(51
 <script src="/static/js/bootstrap-table-page-jump-to-1.21.4.min.js"></script>
 <script src="/static/js/FileSaver-2.0.5.min.js"></script>
 <script src="/static/js/custom.js?v=1006"></script>
+<script src="/static/js/cert-batch.js?v=1"></script>
 <script>
 $(document).ready(function(){
 	updateToolbar();
@@ -241,6 +242,7 @@ $(document).ready(function(){
 						html += '<li><a href="javascript:resetOrder(\''+row.id+'\')">取消订单</a></li>';
 					}
 					html += '<li><a href="javascript:delItem('+row.id+','+row.status+')">删除</a></li>';
+					html += '<li><a href="javascript:delItem('+row.id+','+row.status+',true)">强制删除（含部署任务）</a></li>';
 					html += '</ul></div>';
 					return html;
 				}
@@ -283,15 +285,15 @@ function setAuto(id, status){
 		}
 	}, 'json');
 }
-function delItem(id,status){
-	var msg = '确定要删除此证书订单吗？';
+function delItem(id,status,force){
+	var msg = force ? '确定强制删除此证书订单及其关联的全部自动部署任务吗？' : '确定要删除此证书订单吗？';
 	if(status == 3) msg += '删除后将无法再次下载证书';
 	layer.confirm(msg, {
 		btn: ['确定','取消']
 	}, function(){
-		$.post('/cert/order/del', {id: id}, function(data){
+		$.post('/cert/order/del', {id: id, force: force ? 1 : 0}, function(data){
 			if(data.code == 0) {
-				layer.msg('删除成功', {icon: 1, time:800});
+				layer.msg(data.msg || '删除成功', {icon: 1, time:1200});
 				$('#listTable').bootstrapTable('refresh');
 			} else {
 				layer.msg(data.msg, {icon: 2});
@@ -455,12 +457,29 @@ function operation(action){
 		layer.msg('请选择要操作的订单');
 		return;
 	}
+	if(action == 'submit' || action == 'verify') {
+		var allowed = action == 'submit' ? [0, -1, -2, -3] : [1, 2, -4, -5, -6, -7];
+		var eligible = rows.filter(function(row) { return allowed.indexOf(Number(row.status)) !== -1; });
+		if(eligible.length == 0) {
+			layer.msg(action == 'submit' ? '所选订单没有可提交的状态' : '所选订单没有可验证的状态');
+			return;
+		}
+		var title = action == 'submit' ? '批量提交' : '批量验证';
+		var skipped = rows.length - eligible.length;
+		layer.confirm('将逐个处理 ' + eligible.length + ' 个订单' + (skipped ? '，跳过 ' + skipped + ' 个状态不匹配的订单' : '') + '，确定继续吗？', {title: title}, function(index){
+			layer.close(index);
+			runCertBatch(eligible, {title: title, url: '/cert/order/process', skipped: skipped, data: function(row) { return {id: row.id, mode: action}; }});
+		});
+		return;
+	}
 	var ids = [];
 	for(var i in rows){
 		ids.push(rows[i].id);
 	}
 	if(action == 'delete'){
 		if(!confirm('确定要删除所选证书吗？删除后将无法再次下载')) return;
+	}else if(action == 'force_delete'){
+		if(!confirm('确定强制删除所选证书订单及其关联的全部自动部署任务吗？删除后将无法恢复或再次下载证书')) return;
 	}else if(action == 'reset'){
 		if(!confirm('重置订单后，订单将变成待提交状态，是否确定重置？')) return;
 	}

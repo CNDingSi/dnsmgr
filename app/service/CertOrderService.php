@@ -167,6 +167,7 @@ class CertOrderService
         Db::startTrans();
         try {
             $isLock = Db::name('cert_order')->where('id', $this->order['id'])->lock(true)->value('islock');
+            if ($isLock === null) throw new Exception('证书订单不存在', 102);
             if ($isLock == 1 && time() - strtotime($this->order['locktime']) < 3600) {
                 throw new Exception('订单正在处理中，请稍后再试', 102);
             }

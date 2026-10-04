@@ -197,11 +197,15 @@ CF优选IP功能，添加优选IP任务
 
 SSL证书申请功能
 
+在证书订单列表勾选多个订单后，可通过“批量操作”逐个提交或验证；状态不匹配的订单会跳过，执行结果会显示成功和失败数量。删除关联了自动部署任务的订单时，可使用“强制删除（含部署任务）”，一次清理订单、绑定域名和关联任务。
+
 ![](https://blog.cccyun.cn/content/uploadfile/202412/QQ%E6%88%AA%E5%9B%BE20241221154857.png)
 
 ![](https://blog.cccyun.cn/content/uploadfile/202412/QQ%E6%88%AA%E5%9B%BE20241221154652.png?a)
 
 SSL证书自动部署功能
+
+在自动部署任务列表勾选多个任务后，选择“批量执行”可逐个部署；已完成的任务会重新部署，并显示每个失败任务的原因。
 
 ![](https://blog.cccyun.cn/content/uploadfile/202412/QQ%E6%88%AA%E5%9B%BE20241221154702.png)
 

@@ -38,7 +38,7 @@ pre.pre-log{height: 330px;overflow-y: auto;width: 100%;background-color: rgba(51
   <a href="/cert/deploy/add" class="btn btn-success"><i class="fa fa-plus"></i> 添加</a>
   <div class="btn-group" role="group">
 	<button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">批量操作 <span class="caret"></span></button>
-	<ul class="dropdown-menu"><li><a href="javascript:operation('delete')">删除</a></li><li><a href="javascript:operation('reset')">重置任务</a></li><li><a href="javascript:operation('open')">开启任务</a></li><li><a href="javascript:operation('close')">停止任务</a></li><li><a href="javascript:operation('cert')">修改关联证书</a></li></ul>
+	<ul class="dropdown-menu"><li><a href="javascript:operation('execute')">批量执行</a></li><li role="separator" class="divider"></li><li><a href="javascript:operation('delete')">删除</a></li><li><a href="javascript:operation('reset')">重置任务</a></li><li><a href="javascript:operation('open')">开启任务</a></li><li><a href="javascript:operation('close')">停止任务</a></li><li><a href="javascript:operation('cert')">修改关联证书</a></li></ul>
   </div>
 </form>
 
@@ -55,6 +55,7 @@ pre.pre-log{height: 330px;overflow-y: auto;width: 100%;background-color: rgba(51
 <script src="/static/js/bootstrap-table-page-jump-to-1.21.4.min.js"></script>
 <script src="/static/js/FileSaver-2.0.5.min.js"></script>
 <script src="/static/js/custom.js?v=1006"></script>
+<script src="/static/js/cert-batch.js?v=1"></script>
 <script>
 $(document).ready(function(){
 	updateToolbar();
@@ -313,6 +314,13 @@ function operation(action){
 	var rows = $("#listTable").bootstrapTable('getSelections');
 	if(rows.length == 0){
 		layer.msg('请选择要操作的任务');
+		return;
+	}
+	if(action == 'execute') {
+		layer.confirm('将逐个执行所选的 ' + rows.length + ' 个部署任务；已完成的任务会重新部署。确定继续吗？', {title: '批量执行'}, function(index){
+			layer.close(index);
+			runCertBatch(rows, {title: '批量执行', url: '/cert/deploy/process', data: function(row) { return {id: row.id, mode: 'batch'}; }});
+		});
 		return;
 	}
 	var ids = [];

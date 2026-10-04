@@ -196,7 +196,7 @@ new Vue({
                     }
                 }
             }else{
-                $('select[name="oid[]"]').select2({placeholder: '选择要部署的SSL证书（可多选，将为每个证书单独提交部署任务）'}).on('change', function(){
+                $('select[name="oid[]"]').select2({placeholder: '选择要部署的SSL证书（可多选，将为每个证书单独提交部署任务）', closeOnSelect: false}).on('change', function(){
                     that.oids = $(this).val() || [];
                 });
                 if(document.referrer.indexOf('&oid=') > 0){

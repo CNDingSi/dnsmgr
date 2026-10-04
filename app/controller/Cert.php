@@ -6,6 +6,7 @@ use app\BaseController;
 use app\lib\CertHelper;
 use app\lib\DeployHelper;
 use app\service\CertOrderService;
+use app\service\CertOrderDeleteService;
 use app\service\CertDeployService;
 use Exception;
 use think\facade\Db;
@@ -434,15 +435,12 @@ class Cert extends BaseController
             return json(['code' => 0, 'msg' => '修改证书订单成功！']);
         } elseif ($action == 'del') {
             $id = input('post.id/d');
-            $dcount = DB::name('cert_deploy')->where('oid', $id)->count();
-            if ($dcount > 0) return json(['code' => -1, 'msg' => '该证书关联了自动部署任务，无法删除']);
             try {
-                (new CertOrderService($id))->cancel();
+                $taskCount = CertOrderDeleteService::delete($id, (int) input('post.force/d', 0) === 1);
+                return json(['code' => 0, 'msg' => '删除成功' . ($taskCount ? '，同时删除' . $taskCount . '个部署任务' : '')]);
             } catch (Exception $e) {
+                return json(['code' => -1, 'msg' => $e->getMessage()]);
             }
-            Db::name('cert_order')->where('id', $id)->delete();
-            Db::name('cert_domain')->where('oid', $id)->delete();
-            return json(['code' => 0]);
         } elseif ($action == 'setauto') {
             $id = input('post.id/d');
             $isauto = input('post.isauto/d');
@@ -474,19 +472,21 @@ class Cert extends BaseController
             return json(['code' => 0, 'data' => file_get_contents($file), 'time' => filemtime($file)]);
         } elseif ($action == 'operation') {
             $ids = input('post.ids');
+            if (!is_array($ids) || count($ids) === 0) return json(['code' => -1, 'msg' => '请选择证书订单']);
+            $act = input('post.act');
             $success = 0;
+            $taskCount = 0;
+            $failed = [];
             foreach ($ids as $id) {
-                if (input('post.act') == 'delete') {
-                    $dcount = DB::name('cert_deploy')->where('oid', $id)->count();
-                    if ($dcount > 0) continue;
+                $id = (int) $id;
+                if ($act == 'delete' || $act == 'force_delete') {
                     try {
-                        (new CertOrderService($id))->cancel();
+                        $taskCount += CertOrderDeleteService::delete($id, $act == 'force_delete');
+                        $success++;
                     } catch (Exception $e) {
+                        $failed[] = 'ID ' . $id . '：' . $e->getMessage();
                     }
-                    Db::name('cert_order')->where('id', $id)->delete();
-                    Db::name('cert_domain')->where('oid', $id)->delete();
-                    $success++;
-                } elseif (input('post.act') == 'reset') {
+                } elseif ($act == 'reset') {
                     try {
                         $service = new CertOrderService($id);
                         $service->cancel();
@@ -494,13 +494,16 @@ class Cert extends BaseController
                         $success++;
                     } catch (Exception $e) {
                     }
-                } elseif (input('post.act') == 'open' || input('post.act') == 'close') {
-                    $isauto = input('post.act') == 'open' ? 1 : 0;
+                } elseif ($act == 'open' || $act == 'close') {
+                    $isauto = $act == 'open' ? 1 : 0;
                     Db::name('cert_order')->where('id', $id)->update(['isauto' => $isauto]);
                     $success++;
                 }
             }
-            return json(['code' => 0, 'msg' => '成功操作' . $success . '个证书订单']);
+            $msg = '成功操作' . $success . '个证书订单';
+            if ($taskCount > 0) $msg .= '，同时删除' . $taskCount . '个部署任务';
+            if ($failed) $msg .= '；失败' . count($failed) . '个：' . implode('；', $failed);
+            return json(['code' => 0, 'msg' => $msg]);
         }
         return json(['code' => -3]);
     }
@@ -604,6 +607,15 @@ class Cert extends BaseController
         }
         $id = input('post.id/d');
         $reset = input('post.reset/d', 0);
+        $mode = input('post.mode', '');
+        if ($mode === 'submit' || $mode === 'verify') {
+            $status = Db::name('cert_order')->where('id', $id)->value('status');
+            if ($status === null) return json(['code' => -1, 'msg' => '证书订单不存在']);
+            $allowed = $mode === 'submit' ? [0, -1, -2, -3] : [1, 2, -4, -5, -6, -7];
+            if (!in_array((int) $status, $allowed, true)) {
+                return json(['code' => -1, 'msg' => '订单状态已变化，请刷新列表后重试']);
+            }
+        }
         try {
             $service = new CertOrderService($id);
             if ($reset == 1) {
@@ -822,6 +834,14 @@ class Cert extends BaseController
         }
         $id = input('post.id/d');
         $reset = input('post.reset/d', 0);
+        if (input('post.mode', '') === 'batch') {
+            $task = Db::name('cert_deploy')->where('id', $id)->find();
+            if (!$task) return json(['code' => -1, 'msg' => '自动部署任务不存在']);
+            if ((int) $task['islock'] === 1 && !empty($task['locktime']) && time() - strtotime($task['locktime']) < 3600) {
+                return json(['code' => -1, 'msg' => '部署任务处理中，请稍后再试']);
+            }
+            $reset = (int) $task['status'] >= 1 ? 1 : 0;
+        }
         try {
             $service = new CertDeployService($id);
             if ($reset == 1) {

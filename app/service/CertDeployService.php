@@ -120,6 +120,7 @@ class CertDeployService
         Db::startTrans();
         try {
             $isLock = Db::name('cert_deploy')->where('id', $this->task['id'])->lock(true)->value('islock');
+            if ($isLock === null) throw new Exception('自动部署任务不存在', 102);
             if ($isLock == 1 && time() - strtotime($this->task['locktime']) < 3600) {
                 throw new Exception('部署任务处理中，请稍后再试');
             }
